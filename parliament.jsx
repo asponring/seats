@@ -1,0 +1,530 @@
+import { useState, useMemo, useCallback } from "react";
+
+// ─── Color palette ───────────────────────────────────────────────────────────
+const PALETTE = [
+  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#a855f7",
+  "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1",
+  "#14b8a6", "#e11d48", "#0ea5e9", "#d946ef", "#fb923c",
+];
+
+// ─── ID generator ────────────────────────────────────────────────────────────
+let _uid = 1;
+const uid = () => _uid++;
+
+// ─── Sample data ─────────────────────────────────────────────────────────────
+const SAMPLE = [
+  { id: uid(), name: "Progressive Party",   seats: 220, color: "#3b82f6" },
+  { id: uid(), name: "Conservative Party",  seats: 195, color: "#ef4444" },
+  { id: uid(), name: "Green Alliance",      seats:  42, color: "#22c55e" },
+  { id: uid(), name: "Liberty Union",       seats:  28, color: "#f59e0b" },
+  { id: uid(), name: "Social Democrats",    seats:  15, color: "#a855f7" },
+];
+
+// ─── SVG helpers ─────────────────────────────────────────────────────────────
+function toXY(cx, cy, r, deg) {
+  const rad = (deg * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+/**
+ * Build an SVG path for a donut arc.
+ *
+ * Coordinate convention (SVG y-down):
+ *   0°  = east  |  90°  = south  |  180° = west  |  270° = north
+ *
+ * Semi-circle layout: flat side at bottom, arc curving through top.
+ *   • First party starts at 180° (left)
+ *   • Arc proceeds clockwise (sweep = 1) through 270° (top) to 360° (right)
+ */
+function arcPath(cx, cy, R, r, a1, a2) {
+  const p1 = toXY(cx, cy, R, a1);
+  const p2 = toXY(cx, cy, R, a2);
+  const p3 = toXY(cx, cy, r, a2);
+  const p4 = toXY(cx, cy, r, a1);
+  const lg = a2 - a1 > 180 ? 1 : 0;
+  const f  = (n) => n.toFixed(3);
+  return [
+    `M ${f(p1.x)} ${f(p1.y)}`,
+    `A ${R} ${R} 0 ${lg} 1 ${f(p2.x)} ${f(p2.y)}`,
+    `L ${f(p3.x)} ${f(p3.y)}`,
+    `A ${r} ${r} 0 ${lg} 0 ${f(p4.x)} ${f(p4.y)}`,
+    "Z",
+  ].join(" ");
+}
+
+// ─── Chart constants ──────────────────────────────────────────────────────────
+const CX = 250, CY = 258;   // SVG center (bottom of semicircle)
+const OR = 222, IR = 128;   // outer / inner radius
+const GAP_DEG = 0.8;        // angular gap between parties (degrees)
+
+// ─── Main component ───────────────────────────────────────────────────────────
+export default function ParliamentVisualizer() {
+  const [parties, setParties]   = useState(SAMPLE);
+  const [draft, setDraft]       = useState({ name: "", seats: "", color: PALETTE[5] });
+  const [hoveredId, setHovered] = useState(null);
+  const [chamber, setChamber]   = useState("Parliament");
+
+  // ── Derived totals ──────────────────────────────────────────────────────────
+  const totalSeats = useMemo(
+    () => parties.reduce((s, p) => s + (p.seats || 0), 0),
+    [parties]
+  );
+  const majority = Math.floor(totalSeats / 2) + 1;
+
+  // ── Arc slices ──────────────────────────────────────────────────────────────
+  const slices = useMemo(() => {
+    if (totalSeats === 0) return [];
+    const active    = parties.filter(p => p.seats > 0);
+    const totalGap  = GAP_DEG * active.length;
+    const available = 180 - totalGap;
+    let angle = 180;
+    return active.map(p => {
+      const span  = (p.seats / totalSeats) * available;
+      const slice = { ...p, a1: angle, a2: angle + span };
+      angle += span + GAP_DEG;
+      return slice;
+    });
+  }, [parties, totalSeats]);
+
+  // ── Majority line angle ─────────────────────────────────────────────────────
+  const majorityAngle = useMemo(() => {
+    if (totalSeats === 0) return 270;
+    return 180 + (majority / totalSeats) * 180;
+  }, [majority, totalSeats]);
+
+  const majA = toXY(CX, CY, IR - 10, majorityAngle);
+  const majB = toXY(CX, CY, OR + 10, majorityAngle);
+  const majLabel = toXY(CX, CY, OR + 26, majorityAngle);
+
+  const hoveredParty = hoveredId ? parties.find(p => p.id === hoveredId) : null;
+
+  // ── CRUD ────────────────────────────────────────────────────────────────────
+  const addParty = useCallback(() => {
+    const seats = parseInt(draft.seats, 10);
+    if (!draft.name.trim() || !seats || seats <= 0) return;
+    setParties(prev => [
+      ...prev,
+      { id: uid(), name: draft.name.trim(), seats, color: draft.color },
+    ]);
+    setDraft({ name: "", seats: "", color: PALETTE[_uid % PALETTE.length] });
+  }, [draft]);
+
+  const removeParty = useCallback((id) => {
+    setParties(prev => prev.filter(p => p.id !== id));
+  }, []);
+
+  const updateParty = useCallback((id, field, val) => {
+    setParties(prev =>
+      prev.map(p =>
+        p.id === id
+          ? { ...p, [field]: field === "seats" ? Math.max(0, parseInt(val, 10) || 0) : val }
+          : p
+      )
+    );
+  }, []);
+
+  // ── Styles (inline to keep single-file) ────────────────────────────────────
+  const s = styles;
+
+  return (
+    <div style={s.page}>
+      <div style={s.container}>
+
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div style={s.header}>
+          <input
+            value={chamber}
+            onChange={e => setChamber(e.target.value)}
+            style={s.chamberInput}
+            placeholder="Chamber name…"
+          />
+          <p style={s.subtitle}>
+            {totalSeats.toLocaleString()} total seats
+            &nbsp;·&nbsp;
+            Majority: {majority.toLocaleString()} seats
+          </p>
+        </div>
+
+        {/* ── Chart card ─────────────────────────────────────────────────── */}
+        <div style={s.card}>
+          <svg viewBox="0 0 500 272" style={{ width: "100%", display: "block" }}>
+
+            {/* Background arc */}
+            <path d={arcPath(CX, CY, OR, IR, 180, 360)} fill="#0f172a" />
+
+            {/* Party slices */}
+            {slices.map(sl => (
+              <path
+                key={sl.id}
+                d={arcPath(CX, CY, OR, IR, sl.a1, sl.a2)}
+                fill={sl.color}
+                opacity={hoveredId && hoveredId !== sl.id ? 0.28 : 1}
+                style={{ cursor: "pointer", transition: "opacity 0.15s" }}
+                onMouseEnter={() => setHovered(sl.id)}
+                onMouseLeave={() => setHovered(null)}
+              />
+            ))}
+
+            {/* Majority line */}
+            <line
+              x1={majA.x} y1={majA.y} x2={majB.x} y2={majB.y}
+              stroke="#fbbf24" strokeWidth="2.5" strokeDasharray="5 3"
+              strokeLinecap="round"
+            />
+            <text
+              x={majLabel.x} y={majLabel.y}
+              textAnchor="middle" dominantBaseline="middle"
+              fill="#fbbf24" fontSize="10.5" fontWeight="600"
+              style={{ pointerEvents: "none" }}
+            >
+              50%
+            </text>
+
+            {/* Centre display */}
+            {hoveredParty ? (
+              <>
+                <text x={CX} y={CY - 42} textAnchor="middle"
+                  fill={hoveredParty.color} fontSize="14" fontWeight="700"
+                  style={{ pointerEvents: "none" }}>
+                  {hoveredParty.name}
+                </text>
+                <text x={CX} y={CY - 12} textAnchor="middle"
+                  fill="#f8fafc" fontSize="32" fontWeight="800"
+                  style={{ pointerEvents: "none" }}>
+                  {hoveredParty.seats.toLocaleString()}
+                </text>
+                <text x={CX} y={CY + 14} textAnchor="middle"
+                  fill="#94a3b8" fontSize="13"
+                  style={{ pointerEvents: "none" }}>
+                  {totalSeats > 0
+                    ? ((hoveredParty.seats / totalSeats) * 100).toFixed(1) + "% of seats"
+                    : "—"}
+                </text>
+                {hoveredParty.seats >= majority && (
+                  <text x={CX} y={CY + 32} textAnchor="middle"
+                    fill="#4ade80" fontSize="11" fontWeight="600"
+                    style={{ pointerEvents: "none" }}>
+                    ✓ Majority
+                  </text>
+                )}
+              </>
+            ) : (
+              <>
+                <text x={CX} y={CY - 20} textAnchor="middle"
+                  fill="#475569" fontSize="13"
+                  style={{ pointerEvents: "none" }}>
+                  {chamber || "Parliament"}
+                </text>
+                <text x={CX} y={CY + 14} textAnchor="middle"
+                  fill="#f8fafc" fontSize="34" fontWeight="800"
+                  style={{ pointerEvents: "none" }}>
+                  {totalSeats.toLocaleString()}
+                </text>
+              </>
+            )}
+
+            {/* Baseline */}
+            <line
+              x1={CX - OR - 6} y1={CY}
+              x2={CX + OR + 6} y2={CY}
+              stroke="#1e293b" strokeWidth="2"
+            />
+          </svg>
+
+          {/* Legend */}
+          <div style={s.legend}>
+            {parties.map(p => (
+              <div key={p.id} style={s.legendItem}>
+                <span style={{ ...s.dot, background: p.color }} />
+                <span style={s.legendName}>{p.name}</span>
+                <span style={s.legendSeats}>{p.seats}</span>
+                {p.seats >= majority && (
+                  <span style={s.majorityBadge}>majority</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Party editor ───────────────────────────────────────────────── */}
+        <div style={s.card}>
+          <h2 style={s.sectionTitle}>Parties</h2>
+
+          {/* Column headings */}
+          <div style={{ ...s.row, marginBottom: 4, padding: "0 12px" }}>
+            <div style={{ width: 32 }} />
+            <span style={{ ...s.colLabel, flex: 1 }}>Name</span>
+            <span style={{ ...s.colLabel, width: 90, textAlign: "right" }}>Seats</span>
+            <span style={{ ...s.colLabel, width: 48, textAlign: "right" }}>Share</span>
+            <div style={{ width: 28 }} />
+          </div>
+
+          {/* Existing party rows */}
+          <div style={s.partyList}>
+            {parties.map(p => (
+              <div
+                key={p.id}
+                style={{
+                  ...s.partyRow,
+                  borderLeft: `3px solid ${p.color}`,
+                }}
+              >
+                <input
+                  type="color"
+                  value={p.color}
+                  onChange={e => updateParty(p.id, "color", e.target.value)}
+                  style={s.colorPicker}
+                  title="Party colour"
+                />
+                <input
+                  type="text"
+                  value={p.name}
+                  onChange={e => updateParty(p.id, "name", e.target.value)}
+                  style={{ ...s.textInput, flex: 1 }}
+                  placeholder="Party name"
+                />
+                <input
+                  type="number"
+                  value={p.seats === 0 ? "" : p.seats}
+                  onChange={e => updateParty(p.id, "seats", e.target.value)}
+                  style={{ ...s.textInput, width: 90, textAlign: "right" }}
+                  placeholder="0"
+                  min="0"
+                />
+                <span style={s.shareLabel}>
+                  {totalSeats > 0
+                    ? ((p.seats / totalSeats) * 100).toFixed(1) + "%"
+                    : "—"}
+                </span>
+                <button
+                  onClick={() => removeParty(p.id)}
+                  style={s.removeBtn}
+                  title="Remove"
+                  onMouseEnter={e => e.currentTarget.style.color = "#f87171"}
+                  onMouseLeave={e => e.currentTarget.style.color = "#475569"}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Add party row */}
+          <div style={{ ...s.partyRow, ...s.addRow }}>
+            <input
+              type="color"
+              value={draft.color}
+              onChange={e => setDraft(d => ({ ...d, color: e.target.value }))}
+              style={s.colorPicker}
+            />
+            <input
+              type="text"
+              value={draft.name}
+              onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && addParty()}
+              style={{ ...s.textInput, flex: 1 }}
+              placeholder="New party name…"
+            />
+            <input
+              type="number"
+              value={draft.seats}
+              onChange={e => setDraft(d => ({ ...d, seats: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && addParty()}
+              style={{ ...s.textInput, width: 90, textAlign: "right" }}
+              placeholder="Seats"
+              min="1"
+            />
+            <span style={{ width: 48 }} />
+            <button
+              onClick={addParty}
+              style={s.addBtn}
+              onMouseEnter={e => e.currentTarget.style.background = "#15803d"}
+              onMouseLeave={e => e.currentTarget.style.background = "#16a34a"}
+            >
+              + Add
+            </button>
+          </div>
+        </div>
+
+        <p style={s.hint}>Hover over the chart to inspect a party · Click the colour swatch to customise</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Style objects ────────────────────────────────────────────────────────────
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#0f172a",
+    color: "#f1f5f9",
+    fontFamily: "system-ui, -apple-system, sans-serif",
+    padding: "28px 16px 48px",
+  },
+  container: {
+    maxWidth: 760,
+    margin: "0 auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: 20,
+  },
+  header: {
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  chamberInput: {
+    background: "transparent",
+    border: "none",
+    borderBottom: "2px solid #334155",
+    color: "#f8fafc",
+    fontSize: 26,
+    fontWeight: 700,
+    textAlign: "center",
+    outline: "none",
+    padding: "4px 8px",
+    width: "100%",
+    maxWidth: 420,
+  },
+  subtitle: {
+    color: "#64748b",
+    marginTop: 8,
+    fontSize: 14,
+  },
+  card: {
+    background: "#1e293b",
+    borderRadius: 20,
+    padding: 20,
+    boxShadow: "0 4px 32px rgba(0,0,0,0.45)",
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: 600,
+    margin: "0 0 14px",
+    color: "#e2e8f0",
+  },
+  legend: {
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: "8px 20px",
+    padding: "2px 8px 4px",
+    marginTop: 4,
+  },
+  legendItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 13,
+    color: "#cbd5e1",
+  },
+  dot: {
+    width: 9,
+    height: 9,
+    borderRadius: "50%",
+    flexShrink: 0,
+  },
+  legendName: {
+    color: "#cbd5e1",
+  },
+  legendSeats: {
+    color: "#475569",
+  },
+  majorityBadge: {
+    background: "#14532d",
+    color: "#4ade80",
+    fontSize: 10,
+    fontWeight: 600,
+    padding: "1px 6px",
+    borderRadius: 99,
+    letterSpacing: "0.02em",
+  },
+  row: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  colLabel: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+  },
+  partyList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    marginBottom: 10,
+  },
+  partyRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    background: "#0f172a",
+    borderRadius: 12,
+    padding: "9px 12px",
+  },
+  addRow: {
+    border: "1px dashed #334155",
+    background: "transparent",
+    borderLeft: "1px dashed #334155", // override coloured left border
+  },
+  colorPicker: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    border: "none",
+    cursor: "pointer",
+    background: "none",
+    padding: 0,
+    flexShrink: 0,
+  },
+  textInput: {
+    background: "#1e293b",
+    border: "1px solid #334155",
+    borderRadius: 8,
+    padding: "7px 11px",
+    color: "#f1f5f9",
+    fontSize: 14,
+    outline: "none",
+  },
+  shareLabel: {
+    width: 48,
+    textAlign: "right",
+    fontSize: 13,
+    color: "#475569",
+    flexShrink: 0,
+  },
+  removeBtn: {
+    background: "none",
+    border: "none",
+    color: "#475569",
+    cursor: "pointer",
+    fontSize: 22,
+    lineHeight: 1,
+    padding: "0 2px",
+    borderRadius: 6,
+    transition: "color 0.15s",
+    flexShrink: 0,
+    width: 28,
+  },
+  addBtn: {
+    background: "#16a34a",
+    border: "none",
+    color: "white",
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 600,
+    padding: "8px 16px",
+    borderRadius: 8,
+    transition: "background 0.15s",
+    flexShrink: 0,
+    whiteSpace: "nowrap",
+  },
+  hint: {
+    textAlign: "center",
+    fontSize: 12,
+    color: "#334155",
+    marginTop: 4,
+  },
+};
