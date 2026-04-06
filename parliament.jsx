@@ -210,12 +210,12 @@ export default function ParliamentVisualizer() {
               </>
             ) : (
               <>
-                <text x={CX} y={CY - 20} textAnchor="middle"
+                <text x={CX} y={CY - 42} textAnchor="middle"
                   fill="#475569" fontSize="13"
                   style={{ pointerEvents: "none" }}>
                   {chamber || "Parliament"}
                 </text>
-                <text x={CX} y={CY + 14} textAnchor="middle"
+                <text x={CX} y={CY - 12} textAnchor="middle"
                   fill="#f8fafc" fontSize="34" fontWeight="800"
                   style={{ pointerEvents: "none" }}>
                   {totalSeats.toLocaleString()}
