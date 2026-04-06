@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
+import { createRoot } from "react-dom/client";
 
 // ─── Color palette ───────────────────────────────────────────────────────────
 const PALETTE = [
@@ -528,3 +529,5 @@ const styles = {
     marginTop: 4,
   },
 };
+
+createRoot(document.getElementById("root")).render(<ParliamentVisualizer />);
