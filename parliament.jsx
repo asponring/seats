@@ -74,6 +74,8 @@ export default function ParliamentVisualizer() {
   const dragMeta = useRef(null);
   // DOM refs for each party row, keyed by party id
   const rowRefs  = useRef({});
+  // Ref for the party list container — used to clamp the ghost position
+  const listRef  = useRef(null);
 
   // ── Derived totals ──────────────────────────────────────────────────────────
   const totalSeats = useMemo(
@@ -171,9 +173,16 @@ export default function ParliamentVisualizer() {
     const rect  = rowEl.getBoundingClientRect();
     const rh    = rect.height + 8; // row height + flex gap
 
+    // Snapshot the list bounds so we can clamp the ghost inside it
+    const listRect = listRef.current ? listRef.current.getBoundingClientRect() : null;
+    const rowH     = rect.height; // just the row, without the gap
+
     dragMeta.current = {
       id, origIdx: idx, startY: e.clientY,
       origTop: rect.top, rh,
+      // Clamping limits for ghostY (fixed px):
+      clampMin: listRect ? listRect.top                     : -Infinity,
+      clampMax: listRect ? listRect.bottom - rowH           :  Infinity,
     };
 
     // Capture so pointermove/up keep firing even outside the handle
@@ -192,7 +201,7 @@ export default function ParliamentVisualizer() {
     if (!m) return;
 
     const dy        = e.clientY - m.startY;
-    const ghostY    = m.origTop + dy;
+    const ghostY    = Math.max(m.clampMin, Math.min(m.clampMax, m.origTop + dy));
     const insertIdx = Math.max(
       0,
       Math.min(parties.length - 1, m.origIdx + Math.round(dy / m.rh))
@@ -354,7 +363,7 @@ export default function ParliamentVisualizer() {
           </div>
 
           {/* Party rows */}
-          <div style={s.partyList}>
+          <div ref={listRef} style={s.partyList}>
             {parties.map((p, idx) => {
               const isDragging = drag && drag.id === p.id;
               const ty = getTranslateY(idx, drag);
