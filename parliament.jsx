@@ -98,11 +98,37 @@ export default function ParliamentVisualizer() {
   }, [parties, totalSeats]);
 
   // ── Majority line ───────────────────────────────────────────────────────────
-  // Always at 270° — the geometric centre of the semicircle.
-  // The old formula used `majority / totalSeats * 180` which ignored the
-  // inter-party gaps (totalGap), so the marker drifted whenever parties were
-  // added or removed and the available arc width changed.
-  const majorityAngle = 270;
+  // Walk the same arc geometry as the slices to find where exactly 50% of
+  // seats falls. This keeps the marker aligned with the party boundaries
+  // regardless of how many parties exist or how the gaps are distributed.
+  const majorityAngle = useMemo(() => {
+    if (totalSeats === 0) return 270;
+    const active   = parties.filter(p => p.seats > 0);
+    if (active.length === 0) return 270;
+    const totalGap = GAP_DEG * active.length;
+    const avail    = 180 - totalGap;
+    const half     = totalSeats / 2; // exact 50% (may be fractional)
+
+    let angle    = 180;
+    let cumSeats = 0;
+    for (const p of active) {
+      const span         = (p.seats / totalSeats) * avail;
+      const nextCumSeats = cumSeats + p.seats;
+
+      if (nextCumSeats > half) {
+        // 50% falls strictly inside this party's arc
+        const remaining = half - cumSeats;
+        return angle + (remaining / p.seats) * span;
+      } else if (nextCumSeats === half) {
+        // 50% falls exactly on a gap boundary — centre the marker in the gap
+        return angle + span + GAP_DEG / 2;
+      }
+
+      cumSeats = nextCumSeats;
+      angle   += span + GAP_DEG;
+    }
+    return 270;
+  }, [parties, totalSeats]);
 
   const majA     = toXY(CX, CY, IR - 10, majorityAngle);
   const majB     = toXY(CX, CY, OR + 10, majorityAngle);
