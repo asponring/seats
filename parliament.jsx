@@ -229,6 +229,147 @@ export default function ParliamentVisualizer() {
 
   const hoveredParty = hoveredId ? parties.find(p => p.id === hoveredId) : null;
 
+  // ── Export PNG ─────────────────────────────────────────────────────────────
+  const exportPNG = useCallback(() => {
+    const SCALE      = 2;
+    const SVG_W      = 500;
+    const SVG_H      = 272;
+    const PAD_TOP    = 20;
+    const LINE_H     = 24;
+    const ITEM_GAP   = 20;
+    const PAD_BOTTOM = 24;
+    const DOT_R      = 4.5;
+    const DOT_GAP    = 6;
+    const SEAT_GAP   = 8;
+
+    // Measure legend text widths
+    const mCtx = document.createElement("canvas").getContext("2d");
+    mCtx.font = "13px system-ui, -apple-system, sans-serif";
+    const items = parties.map(p => {
+      const nameW  = mCtx.measureText(p.name).width;
+      const seatW  = mCtx.measureText(p.seats.toLocaleString()).width;
+      const totalW = DOT_R * 2 + DOT_GAP + nameW + SEAT_GAP + seatW;
+      return { ...p, nameW, seatW, totalW };
+    });
+
+    // Wrap items into rows
+    const maxRowW = SVG_W - 32;
+    const rows    = [];
+    let   row     = [], rowW = 0;
+    items.forEach(item => {
+      const extra = row.length > 0 ? ITEM_GAP : 0;
+      if (row.length > 0 && rowW + extra + item.totalW > maxRowW) {
+        rows.push(row); row = [item]; rowW = item.totalW;
+      } else {
+        row.push(item); rowW += extra + item.totalW;
+      }
+    });
+    if (row.length > 0) rows.push(row);
+
+    const legendH = PAD_TOP + rows.length * LINE_H + PAD_BOTTOM;
+    const canvas  = document.createElement("canvas");
+    canvas.width  = SVG_W * SCALE;
+    canvas.height = (SVG_H + legendH) * SCALE;
+    const ctx     = canvas.getContext("2d");
+    ctx.scale(SCALE, SCALE);
+
+    // Background
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(0, 0, SVG_W, SVG_H + legendH);
+
+    // Background donut arc
+    ctx.beginPath();
+    ctx.arc(CX, CY, OR, Math.PI, 2 * Math.PI, false);
+    ctx.arc(CX, CY, IR, 2 * Math.PI, Math.PI, true);
+    ctx.closePath();
+    ctx.fillStyle = "#0f172a";
+    ctx.fill();
+
+    // Party arcs
+    slices.forEach(sl => {
+      const a1 = (sl.a1 * Math.PI) / 180;
+      const a2 = (sl.a2 * Math.PI) / 180;
+      ctx.beginPath();
+      ctx.arc(CX, CY, OR, a1, a2, false);
+      ctx.arc(CX, CY, IR, a2, a1, true);
+      ctx.closePath();
+      ctx.fillStyle = sl.color;
+      ctx.fill();
+    });
+
+    // Majority dashed line
+    const majRad = (majorityAngle * Math.PI) / 180;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(CX + (IR - 10) * Math.cos(majRad), CY + (IR - 10) * Math.sin(majRad));
+    ctx.lineTo(CX + (OR + 10) * Math.cos(majRad), CY + (OR + 10) * Math.sin(majRad));
+    ctx.strokeStyle = "#fbbf24";
+    ctx.lineWidth   = 2.5;
+    ctx.lineCap     = "round";
+    ctx.setLineDash([5, 3]);
+    ctx.stroke();
+    ctx.restore();
+
+    // "50%" label
+    ctx.fillStyle    = "#fbbf24";
+    ctx.font         = "600 10.5px system-ui, -apple-system, sans-serif";
+    ctx.textAlign    = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("50%",
+      CX + (OR + 26) * Math.cos(majRad),
+      CY + (OR + 26) * Math.sin(majRad)
+    );
+
+    // Centre labels
+    ctx.textAlign    = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle    = "#475569";
+    ctx.font         = "13px system-ui, -apple-system, sans-serif";
+    ctx.fillText(chamber || "Parliament", CX, CY - 42);
+    ctx.fillStyle    = "#f8fafc";
+    ctx.font         = "800 34px system-ui, -apple-system, sans-serif";
+    ctx.fillText(totalSeats.toLocaleString(), CX, CY - 12);
+
+    // Baseline
+    ctx.beginPath();
+    ctx.moveTo(CX - OR - 6, CY);
+    ctx.lineTo(CX + OR + 6, CY);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+
+    // Legend
+    rows.forEach((rowItems, ri) => {
+      const y     = SVG_H + PAD_TOP + ri * LINE_H + LINE_H / 2;
+      const rw    = rowItems.reduce((s, it, i) => s + it.totalW + (i > 0 ? ITEM_GAP : 0), 0);
+      let   x     = (SVG_W - rw) / 2;
+      rowItems.forEach(item => {
+        ctx.beginPath();
+        ctx.arc(x + DOT_R, y, DOT_R, 0, Math.PI * 2);
+        ctx.fillStyle = item.color;
+        ctx.fill();
+        ctx.fillStyle    = "#cbd5e1";
+        ctx.font         = "13px system-ui, -apple-system, sans-serif";
+        ctx.textAlign    = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(item.name, x + DOT_R * 2 + DOT_GAP, y);
+        ctx.fillStyle = "#475569";
+        ctx.fillText(item.seats.toLocaleString(), x + DOT_R * 2 + DOT_GAP + item.nameW + SEAT_GAP, y);
+        x += item.totalW + ITEM_GAP;
+      });
+    });
+
+    // Download
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement("a");
+      a.href    = url;
+      a.download = `${(chamber || "parliament").toLowerCase().replace(/\s+/g, "-")}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  }, [slices, parties, totalSeats, chamber, majorityAngle]);
+
   // ── CRUD ────────────────────────────────────────────────────────────────────
   const addParty = useCallback(() => {
     const seats = parseInt(draft.seats, 10);
@@ -436,6 +577,18 @@ export default function ParliamentVisualizer() {
                 )}
               </div>
             ))}
+          </div>
+
+          {/* Export */}
+          <div style={{ textAlign: "right", marginTop: 14 }}>
+            <button
+              onClick={exportPNG}
+              style={s.exportBtn}
+              onMouseEnter={e => e.currentTarget.style.background = "#1d4ed8"}
+              onMouseLeave={e => e.currentTarget.style.background = "#2563eb"}
+            >
+              ↓ Export PNG
+            </button>
           </div>
         </div>
 
@@ -797,6 +950,18 @@ const styles = {
     fontSize: 12,
     color: "#334155",
     marginTop: 4,
+  },
+  exportBtn: {
+    background: "#2563eb",
+    border: "none",
+    color: "white",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 600,
+    padding: "7px 14px",
+    borderRadius: 8,
+    transition: "background 0.15s",
+    letterSpacing: "0.02em",
   },
 };
 
