@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
 
 // ─── Color palette ───────────────────────────────────────────────────────────
@@ -64,6 +64,8 @@ export default function ParliamentVisualizer() {
   const [draft, setDraft]       = useState({ name: "", seats: "", color: PALETTE[5] });
   const [hoveredId, setHovered] = useState(null);
   const [chamber, setChamber]   = useState("Parliament");
+  const [dragOverId, setDragOverId] = useState(null);
+  const dragSrcId = useRef(null);
 
   // ── Derived totals ──────────────────────────────────────────────────────────
   const totalSeats = useMemo(
@@ -122,6 +124,45 @@ export default function ParliamentVisualizer() {
           : p
       )
     );
+  }, []);
+
+  // ── Drag-and-drop reorder ───────────────────────────────────────────────────
+  const handleDragStart = useCallback((e, id) => {
+    dragSrcId.current = id;
+    e.dataTransfer.effectAllowed = "move";
+    // Transparent drag image so the row stays visible
+    const ghost = document.createElement("div");
+    ghost.style.position = "absolute";
+    ghost.style.top = "-9999px";
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 0, 0);
+    setTimeout(() => document.body.removeChild(ghost), 0);
+  }, []);
+
+  const handleDragOver = useCallback((e, id) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (id !== dragSrcId.current) setDragOverId(id);
+  }, []);
+
+  const handleDrop = useCallback((e, targetId) => {
+    e.preventDefault();
+    const srcId = dragSrcId.current;
+    if (!srcId || srcId === targetId) { setDragOverId(null); return; }
+    setParties(prev => {
+      const next = [...prev];
+      const from = next.findIndex(p => p.id === srcId);
+      const to   = next.findIndex(p => p.id === targetId);
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+    setDragOverId(null);
+    dragSrcId.current = null;
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDragOverId(null);
+    dragSrcId.current = null;
   }, []);
 
   // ── Styles (inline to keep single-file) ────────────────────────────────────
@@ -253,6 +294,7 @@ export default function ParliamentVisualizer() {
 
           {/* Column headings */}
           <div style={{ ...s.row, marginBottom: 4, padding: "0 12px" }}>
+            <div style={{ width: 18 }} />
             <div style={{ width: 32 }} />
             <span style={{ ...s.colLabel, flex: 1 }}>Name</span>
             <span style={{ ...s.colLabel, width: 90, textAlign: "right" }}>Seats</span>
@@ -265,11 +307,26 @@ export default function ParliamentVisualizer() {
             {parties.map(p => (
               <div
                 key={p.id}
+                draggable
+                onDragStart={e => handleDragStart(e, p.id)}
+                onDragOver={e => handleDragOver(e, p.id)}
+                onDrop={e => handleDrop(e, p.id)}
+                onDragEnd={handleDragEnd}
                 style={{
                   ...s.partyRow,
                   borderLeft: `3px solid ${p.color}`,
+                  outline: dragOverId === p.id ? `2px solid ${p.color}` : "2px solid transparent",
+                  opacity: dragSrcId.current === p.id ? 0.45 : 1,
+                  transition: "outline 0.1s, opacity 0.1s",
                 }}
               >
+                {/* Drag handle */}
+                <span
+                  style={s.dragHandle}
+                  title="Drag to reorder"
+                >
+                  ⠿
+                </span>
                 <input
                   type="color"
                   value={p.color}
@@ -347,7 +404,7 @@ export default function ParliamentVisualizer() {
           </div>
         </div>
 
-        <p style={s.hint}>Hover over the chart to inspect a party · Click the colour swatch to customise</p>
+        <p style={s.hint}>Hover over the chart to inspect a party · Click the colour swatch to customise · Drag ⠿ to reorder</p>
       </div>
     </div>
   );
@@ -495,6 +552,17 @@ const styles = {
     fontSize: 13,
     color: "#475569",
     flexShrink: 0,
+  },
+  dragHandle: {
+    color: "#334155",
+    cursor: "grab",
+    fontSize: 18,
+    lineHeight: 1,
+    userSelect: "none",
+    flexShrink: 0,
+    width: 18,
+    textAlign: "center",
+    transition: "color 0.15s",
   },
   removeBtn: {
     background: "none",
