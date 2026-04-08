@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import { createPortal } from "react-dom";
 
 // ─── Color palette ───────────────────────────────────────────────────────────
 const PALETTE = [
@@ -24,37 +25,53 @@ const PARTY_COLORS = [
 
 // ─── Custom colour picker ─────────────────────────────────────────────────────
 function ColorPicker({ value, onChange }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [open, setOpen]   = useState(false);
+  const [pos,  setPos]    = useState({ top: 0, left: 0 });
+  const btnRef            = useRef(null);
+  const popoverRef        = useRef(null);
+
+  const handleToggle = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 6, left: r.left });
+    }
+    setOpen(o => !o);
+  };
 
   useEffect(() => {
     if (!open) return;
     const close = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (
+        popoverRef.current && !popoverRef.current.contains(e.target) &&
+        btnRef.current     && !btnRef.current.contains(e.target)
+      ) setOpen(false);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
 
   return (
-    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
+    <div style={{ flexShrink: 0 }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={btnRef}
+        onClick={handleToggle}
         title="Choose colour"
         style={{
           width: 30, height: 30, borderRadius: 8,
-          background: value,
-          border: "2px solid #334155",
+          background: value, border: "2px solid #334155",
           cursor: "pointer", padding: 0, display: "block",
         }}
       />
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 200,
-          background: "#1e293b", border: "1px solid #334155", borderRadius: 10,
-          padding: 8, display: "grid", gridTemplateColumns: "repeat(5, 1fr)",
-          gap: 6, boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
-        }}>
+      {open && createPortal(
+        <div
+          ref={popoverRef}
+          style={{
+            position: "fixed", top: pos.top, left: pos.left, zIndex: 9999,
+            background: "#1e293b", border: "1px solid #334155", borderRadius: 10,
+            padding: 8, display: "grid", gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 6, boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+          }}
+        >
           {PARTY_COLORS.map(c => (
             <button
               key={c}
@@ -70,7 +87,8 @@ function ColorPicker({ value, onChange }) {
               }}
             />
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
