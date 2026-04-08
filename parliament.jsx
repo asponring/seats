@@ -412,12 +412,12 @@ export default function ParliamentVisualizer() {
                     placeholder="Party name"
                   />
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={p.seats === 0 ? "" : p.seats}
-                    onChange={e => updateParty(p.id, "seats", e.target.value)}
+                    onChange={e => updateParty(p.id, "seats", e.target.value.replace(/\D/g, ""))}
                     style={{ ...s.textInput, width: 90, textAlign: "right" }}
                     placeholder="0"
-                    min="0"
                   />
                   <span style={s.shareLabel}>
                     {totalSeats > 0
@@ -440,6 +440,8 @@ export default function ParliamentVisualizer() {
 
           {/* Add party row */}
           <div style={{ ...s.partyRow, ...s.addRow }}>
+            {/* Spacer to align with drag handle column above */}
+            <div style={{ width: 18, flexShrink: 0 }} />
             <input
               type="color"
               value={draft.color}
@@ -455,18 +457,17 @@ export default function ParliamentVisualizer() {
               placeholder="New party name…"
             />
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={draft.seats}
-              onChange={e => setDraft(d => ({ ...d, seats: e.target.value }))}
+              onChange={e => setDraft(d => ({ ...d, seats: e.target.value.replace(/\D/g, "") }))}
               onKeyDown={e => e.key === "Enter" && addParty()}
               style={{ ...s.textInput, width: 90, textAlign: "right" }}
               placeholder="Seats"
-              min="1"
             />
-            <span style={{ width: 48 }} />
             <button
               onClick={addParty}
-              style={s.addBtn}
+              style={{ ...s.addBtn, width: 86, textAlign: "center" }}
               onMouseEnter={e => e.currentTarget.style.background = "#15803d"}
               onMouseLeave={e => e.currentTarget.style.background = "#16a34a"}
             >
