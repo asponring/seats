@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
 // ─── Color palette ───────────────────────────────────────────────────────────
@@ -7,6 +7,74 @@ const PALETTE = [
   "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1",
   "#14b8a6", "#e11d48", "#0ea5e9", "#d946ef", "#fb923c",
 ];
+
+// ─── Party colour swatches ────────────────────────────────────────────────────
+const PARTY_COLORS = [
+  "#ef4444", // Red
+  "#3b82f6", // Blue
+  "#111827", // Black
+  "#22c55e", // Green
+  "#eab308", // Yellow
+  "#ec4899", // Pink
+  "#06b6d4", // Turquoise
+  "#f8fafc", // White
+  "#f97316", // Orange
+  "#a855f7", // Purple
+];
+
+// ─── Custom colour picker ─────────────────────────────────────────────────────
+function ColorPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Choose colour"
+        style={{
+          width: 30, height: 30, borderRadius: 8,
+          background: value,
+          border: "2px solid #334155",
+          cursor: "pointer", padding: 0, display: "block",
+        }}
+      />
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 200,
+          background: "#1e293b", border: "1px solid #334155", borderRadius: 10,
+          padding: 8, display: "grid", gridTemplateColumns: "repeat(5, 1fr)",
+          gap: 6, boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+        }}>
+          {PARTY_COLORS.map(c => (
+            <button
+              key={c}
+              onClick={() => { onChange(c); setOpen(false); }}
+              title={c}
+              style={{
+                width: 26, height: 26, borderRadius: 6,
+                background: c,
+                border: c === value ? "2px solid #f8fafc" : "2px solid transparent",
+                outline: c === value ? "2px solid #64748b" : "none",
+                outlineOffset: 1,
+                cursor: "pointer", padding: 0,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── ID generator ────────────────────────────────────────────────────────────
 let _uid = 1;
@@ -397,12 +465,9 @@ export default function ParliamentVisualizer() {
                     ⠿
                   </span>
 
-                  <input
-                    type="color"
+                  <ColorPicker
                     value={p.color}
-                    onChange={e => updateParty(p.id, "color", e.target.value)}
-                    style={s.colorPicker}
-                    title="Party colour"
+                    onChange={v => updateParty(p.id, "color", v)}
                   />
                   <input
                     type="text"
@@ -442,11 +507,9 @@ export default function ParliamentVisualizer() {
           <div style={{ ...s.partyRow, ...s.addRow }}>
             {/* Spacer to align with drag handle column above */}
             <div style={{ width: 18, flexShrink: 0 }} />
-            <input
-              type="color"
+            <ColorPicker
               value={draft.color}
-              onChange={e => setDraft(d => ({ ...d, color: e.target.value }))}
-              style={s.colorPicker}
+              onChange={v => setDraft(d => ({ ...d, color: v }))}
             />
             <input
               type="text"
