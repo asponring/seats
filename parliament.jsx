@@ -472,12 +472,22 @@ export default function ParliamentVisualizer() {
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div style={s.header}>
-          <input
-            value={chamber}
-            onChange={e => setChamber(e.target.value)}
-            style={s.chamberInput}
-            placeholder="Chamber name…"
-          />
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <input
+              value={chamber}
+              onChange={e => setChamber(e.target.value)}
+              style={{
+                ...s.chamberInput,
+                width: `${((Math.max(6, chamber.length || 14)) * 0.65 + 1).toFixed(2)}em`,
+              }}
+              placeholder="Chamber name…"
+            />
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+              style={{ color: "#475569", flexShrink: 0, marginBottom: 2 }}>
+              <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 2.474L4.402 13.072l-3.172.422.422-3.172 9.361-8.895Z"
+                stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
           <p style={s.subtitle}>
             {totalSeats.toLocaleString()} total seats
             &nbsp;·&nbsp;
@@ -799,8 +809,8 @@ const styles = {
     textAlign: "center",
     outline: "none",
     padding: "4px 8px",
-    width: "100%",
-    maxWidth: 420,
+    minWidth: 80,
+    maxWidth: 560,
   },
   subtitle: {
     color: "#64748b",
