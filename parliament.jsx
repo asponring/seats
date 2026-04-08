@@ -27,16 +27,6 @@ function toXY(cx, cy, r, deg) {
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
-/**
- * Build an SVG path for a donut arc.
- *
- * Coordinate convention (SVG y-down):
- *   0°  = east  |  90°  = south  |  180° = west  |  270° = north
- *
- * Semi-circle layout: flat side at bottom, arc curving through top.
- *   • First party starts at 180° (left)
- *   • Arc proceeds clockwise (sweep = 1) through 270° (top) to 360° (right)
- */
 function arcPath(cx, cy, R, r, a1, a2) {
   const p1 = toXY(cx, cy, R, a1);
   const p2 = toXY(cx, cy, R, a2);
@@ -54,9 +44,21 @@ function arcPath(cx, cy, R, r, a1, a2) {
 }
 
 // ─── Chart constants ──────────────────────────────────────────────────────────
-const CX = 250, CY = 258;   // SVG center (bottom of semicircle)
-const OR = 222, IR = 128;   // outer / inner radius
-const GAP_DEG = 0.8;        // angular gap between parties (degrees)
+const CX = 250, CY = 258;
+const OR = 222, IR = 128;
+const GAP_DEG = 0.8;
+
+// ─── Drag helper: how far should row at `idx` translate? ─────────────────────
+function getTranslateY(idx, drag) {
+  if (!drag) return 0;
+  const { origIdx, insertIdx, rh } = drag;
+  if (idx === origIdx) return 0;
+  // Dragging downward — items in between shift up
+  if (origIdx < insertIdx && idx > origIdx && idx <= insertIdx) return -rh;
+  // Dragging upward — items in between shift down
+  if (origIdx > insertIdx && idx >= insertIdx && idx < origIdx) return rh;
+  return 0;
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function ParliamentVisualizer() {
@@ -64,8 +66,14 @@ export default function ParliamentVisualizer() {
   const [draft, setDraft]       = useState({ name: "", seats: "", color: PALETTE[5] });
   const [hoveredId, setHovered] = useState(null);
   const [chamber, setChamber]   = useState("Parliament");
-  const [dragOverId, setDragOverId] = useState(null);
-  const dragSrcId = useRef(null);
+
+  // drag = { id, origIdx, insertIdx, rh, ghostX, ghostY, ghostW }
+  const [drag, setDrag] = useState(null);
+
+  // Mutable drag metadata — not state so pointer-move doesn't lag
+  const dragMeta = useRef(null);
+  // DOM refs for each party row, keyed by party id
+  const rowRefs  = useRef({});
 
   // ── Derived totals ──────────────────────────────────────────────────────────
   const totalSeats = useMemo(
@@ -77,26 +85,26 @@ export default function ParliamentVisualizer() {
   // ── Arc slices ──────────────────────────────────────────────────────────────
   const slices = useMemo(() => {
     if (totalSeats === 0) return [];
-    const active    = parties.filter(p => p.seats > 0);
-    const totalGap  = GAP_DEG * active.length;
-    const available = 180 - totalGap;
+    const active   = parties.filter(p => p.seats > 0);
+    const totalGap = GAP_DEG * active.length;
+    const avail    = 180 - totalGap;
     let angle = 180;
     return active.map(p => {
-      const span  = (p.seats / totalSeats) * available;
+      const span  = (p.seats / totalSeats) * avail;
       const slice = { ...p, a1: angle, a2: angle + span };
       angle += span + GAP_DEG;
       return slice;
     });
   }, [parties, totalSeats]);
 
-  // ── Majority line angle ─────────────────────────────────────────────────────
+  // ── Majority line ───────────────────────────────────────────────────────────
   const majorityAngle = useMemo(() => {
     if (totalSeats === 0) return 270;
     return 180 + (majority / totalSeats) * 180;
   }, [majority, totalSeats]);
 
-  const majA = toXY(CX, CY, IR - 10, majorityAngle);
-  const majB = toXY(CX, CY, OR + 10, majorityAngle);
+  const majA     = toXY(CX, CY, IR - 10, majorityAngle);
+  const majB     = toXY(CX, CY, OR + 10, majorityAngle);
   const majLabel = toXY(CX, CY, OR + 26, majorityAngle);
 
   const hoveredParty = hoveredId ? parties.find(p => p.id === hoveredId) : null;
@@ -126,46 +134,68 @@ export default function ParliamentVisualizer() {
     );
   }, []);
 
-  // ── Drag-and-drop reorder ───────────────────────────────────────────────────
-  const handleDragStart = useCallback((e, id) => {
-    dragSrcId.current = id;
-    e.dataTransfer.effectAllowed = "move";
-    // Transparent drag image so the row stays visible
-    const ghost = document.createElement("div");
-    ghost.style.position = "absolute";
-    ghost.style.top = "-9999px";
-    document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, 0, 0);
-    setTimeout(() => document.body.removeChild(ghost), 0);
-  }, []);
-
-  const handleDragOver = useCallback((e, id) => {
+  // ── Pointer-based drag ──────────────────────────────────────────────────────
+  const handlePointerDown = useCallback((e, id) => {
+    if (e.button !== 0) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    if (id !== dragSrcId.current) setDragOverId(id);
-  }, []);
 
-  const handleDrop = useCallback((e, targetId) => {
-    e.preventDefault();
-    const srcId = dragSrcId.current;
-    if (!srcId || srcId === targetId) { setDragOverId(null); return; }
-    setParties(prev => {
-      const next = [...prev];
-      const from = next.findIndex(p => p.id === srcId);
-      const to   = next.findIndex(p => p.id === targetId);
-      next.splice(to, 0, next.splice(from, 1)[0]);
-      return next;
+    const idx   = parties.findIndex(p => p.id === id);
+    const rowEl = rowRefs.current[id];
+    const rect  = rowEl.getBoundingClientRect();
+    const rh    = rect.height + 8; // row height + flex gap
+
+    dragMeta.current = {
+      id, origIdx: idx, startY: e.clientY,
+      origTop: rect.top, rh,
+    };
+
+    // Capture so pointermove/up keep firing even outside the handle
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    setDrag({
+      id, origIdx: idx, insertIdx: idx, rh,
+      ghostX: rect.left,
+      ghostY: rect.top,
+      ghostW: rect.width,
     });
-    setDragOverId(null);
-    dragSrcId.current = null;
+  }, [parties]);
+
+  const handlePointerMove = useCallback((e) => {
+    const m = dragMeta.current;
+    if (!m) return;
+
+    const dy        = e.clientY - m.startY;
+    const ghostY    = m.origTop + dy;
+    const insertIdx = Math.max(
+      0,
+      Math.min(parties.length - 1, m.origIdx + Math.round(dy / m.rh))
+    );
+
+    setDrag(d => d ? { ...d, ghostY, insertIdx } : null);
+  }, [parties.length]);
+
+  const commitDrag = useCallback(() => {
+    const m = dragMeta.current;
+    if (!m) return;
+    dragMeta.current = null;
+
+    setDrag(d => {
+      if (!d) return null;
+      const { origIdx, insertIdx } = d;
+      if (origIdx !== insertIdx) {
+        setParties(prev => {
+          const next = [...prev];
+          next.splice(insertIdx, 0, next.splice(origIdx, 1)[0]);
+          return next;
+        });
+      }
+      return null;
+    });
   }, []);
 
-  const handleDragEnd = useCallback(() => {
-    setDragOverId(null);
-    dragSrcId.current = null;
-  }, []);
+  // ── For rendering the ghost, find the party being dragged ──────────────────
+  const draggedParty = drag ? parties.find(p => p.id === drag.id) : null;
 
-  // ── Styles (inline to keep single-file) ────────────────────────────────────
   const s = styles;
 
   return (
@@ -190,11 +220,8 @@ export default function ParliamentVisualizer() {
         {/* ── Chart card ─────────────────────────────────────────────────── */}
         <div style={s.card}>
           <svg viewBox="0 0 500 272" style={{ width: "100%", display: "block" }}>
-
-            {/* Background arc */}
             <path d={arcPath(CX, CY, OR, IR, 180, 360)} fill="#0f172a" />
 
-            {/* Party slices */}
             {slices.map(sl => (
               <path
                 key={sl.id}
@@ -207,7 +234,6 @@ export default function ParliamentVisualizer() {
               />
             ))}
 
-            {/* Majority line */}
             <line
               x1={majA.x} y1={majA.y} x2={majB.x} y2={majB.y}
               stroke="#fbbf24" strokeWidth="2.5" strokeDasharray="5 3"
@@ -222,7 +248,6 @@ export default function ParliamentVisualizer() {
               50%
             </text>
 
-            {/* Centre display */}
             {hoveredParty ? (
               <>
                 <text x={CX} y={CY - 42} textAnchor="middle"
@@ -265,7 +290,6 @@ export default function ParliamentVisualizer() {
               </>
             )}
 
-            {/* Baseline */}
             <line
               x1={CX - OR - 6} y1={CY}
               x2={CX + OR + 6} y2={CY}
@@ -302,69 +326,80 @@ export default function ParliamentVisualizer() {
             <div style={{ width: 28 }} />
           </div>
 
-          {/* Existing party rows */}
+          {/* Party rows */}
           <div style={s.partyList}>
-            {parties.map(p => (
-              <div
-                key={p.id}
-                draggable
-                onDragStart={e => handleDragStart(e, p.id)}
-                onDragOver={e => handleDragOver(e, p.id)}
-                onDrop={e => handleDrop(e, p.id)}
-                onDragEnd={handleDragEnd}
-                style={{
-                  ...s.partyRow,
-                  borderLeft: `3px solid ${p.color}`,
-                  outline: dragOverId === p.id ? `2px solid ${p.color}` : "2px solid transparent",
-                  opacity: dragSrcId.current === p.id ? 0.45 : 1,
-                  transition: "outline 0.1s, opacity 0.1s",
-                }}
-              >
-                {/* Drag handle */}
-                <span
-                  style={s.dragHandle}
-                  title="Drag to reorder"
+            {parties.map((p, idx) => {
+              const isDragging = drag && drag.id === p.id;
+              const ty = getTranslateY(idx, drag);
+              return (
+                <div
+                  key={p.id}
+                  ref={el => { if (el) rowRefs.current[p.id] = el; }}
+                  style={{
+                    ...s.partyRow,
+                    borderLeft: `3px solid ${p.color}`,
+                    // Invisible placeholder while being dragged
+                    opacity: isDragging ? 0 : 1,
+                    // Slide other rows out of the way
+                    transform: `translateY(${ty}px)`,
+                    transition: isDragging
+                      ? "none"
+                      : "transform 0.18s cubic-bezier(0.25,0.46,0.45,0.94)",
+                    // Prevent text selection while dragging
+                    userSelect: drag ? "none" : "auto",
+                  }}
                 >
-                  ⠿
-                </span>
-                <input
-                  type="color"
-                  value={p.color}
-                  onChange={e => updateParty(p.id, "color", e.target.value)}
-                  style={s.colorPicker}
-                  title="Party colour"
-                />
-                <input
-                  type="text"
-                  value={p.name}
-                  onChange={e => updateParty(p.id, "name", e.target.value)}
-                  style={{ ...s.textInput, flex: 1 }}
-                  placeholder="Party name"
-                />
-                <input
-                  type="number"
-                  value={p.seats === 0 ? "" : p.seats}
-                  onChange={e => updateParty(p.id, "seats", e.target.value)}
-                  style={{ ...s.textInput, width: 90, textAlign: "right" }}
-                  placeholder="0"
-                  min="0"
-                />
-                <span style={s.shareLabel}>
-                  {totalSeats > 0
-                    ? ((p.seats / totalSeats) * 100).toFixed(1) + "%"
-                    : "—"}
-                </span>
-                <button
-                  onClick={() => removeParty(p.id)}
-                  style={s.removeBtn}
-                  title="Remove"
-                  onMouseEnter={e => e.currentTarget.style.color = "#f87171"}
-                  onMouseLeave={e => e.currentTarget.style.color = "#475569"}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+                  {/* Drag handle */}
+                  <span
+                    style={s.dragHandle}
+                    title="Drag to reorder"
+                    onPointerDown={e => handlePointerDown(e, p.id)}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={commitDrag}
+                    onPointerCancel={commitDrag}
+                  >
+                    ⠿
+                  </span>
+
+                  <input
+                    type="color"
+                    value={p.color}
+                    onChange={e => updateParty(p.id, "color", e.target.value)}
+                    style={s.colorPicker}
+                    title="Party colour"
+                  />
+                  <input
+                    type="text"
+                    value={p.name}
+                    onChange={e => updateParty(p.id, "name", e.target.value)}
+                    style={{ ...s.textInput, flex: 1 }}
+                    placeholder="Party name"
+                  />
+                  <input
+                    type="number"
+                    value={p.seats === 0 ? "" : p.seats}
+                    onChange={e => updateParty(p.id, "seats", e.target.value)}
+                    style={{ ...s.textInput, width: 90, textAlign: "right" }}
+                    placeholder="0"
+                    min="0"
+                  />
+                  <span style={s.shareLabel}>
+                    {totalSeats > 0
+                      ? ((p.seats / totalSeats) * 100).toFixed(1) + "%"
+                      : "—"}
+                  </span>
+                  <button
+                    onClick={() => removeParty(p.id)}
+                    style={s.removeBtn}
+                    title="Remove"
+                    onMouseEnter={e => e.currentTarget.style.color = "#f87171"}
+                    onMouseLeave={e => e.currentTarget.style.color = "#475569"}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           {/* Add party row */}
@@ -406,6 +441,54 @@ export default function ParliamentVisualizer() {
 
         <p style={s.hint}>Hover over the chart to inspect a party · Click the colour swatch to customise · Drag ⠿ to reorder</p>
       </div>
+
+      {/* ── Floating drag ghost ────────────────────────────────────────────── */}
+      {drag && draggedParty && (
+        <div
+          style={{
+            position: "fixed",
+            top:    drag.ghostY,
+            left:   drag.ghostX,
+            width:  drag.ghostW,
+            pointerEvents: "none",
+            zIndex: 9999,
+            // Lifted look
+            boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
+            borderRadius: 12,
+            opacity: 0.96,
+            transform: "scale(1.03)",
+            // Match row style
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            background: "#0f172a",
+            borderLeft: `3px solid ${draggedParty.color}`,
+            padding: "9px 12px",
+            boxSizing: "border-box",
+          }}
+        >
+          <span style={{ ...styles.dragHandle, color: "#64748b", cursor: "grabbing" }}>⠿</span>
+          <span style={{
+            width: 30, height: 30, borderRadius: 8,
+            background: draggedParty.color, flexShrink: 0,
+          }} />
+          <span style={{ flex: 1, fontSize: 14, color: "#f1f5f9", overflow: "hidden",
+            whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+            {draggedParty.name}
+          </span>
+          <span style={{ width: 90, textAlign: "right", fontSize: 14,
+            color: "#f1f5f9", background: "#1e293b", borderRadius: 8,
+            padding: "7px 11px", border: "1px solid #334155", boxSizing: "border-box" }}>
+            {draggedParty.seats}
+          </span>
+          <span style={{ width: 48, textAlign: "right", fontSize: 13, color: "#475569" }}>
+            {totalSeats > 0
+              ? ((draggedParty.seats / totalSeats) * 100).toFixed(1) + "%"
+              : "—"}
+          </span>
+          <span style={{ width: 28 }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -481,12 +564,8 @@ const styles = {
     borderRadius: "50%",
     flexShrink: 0,
   },
-  legendName: {
-    color: "#cbd5e1",
-  },
-  legendSeats: {
-    color: "#475569",
-  },
+  legendName: { color: "#cbd5e1" },
+  legendSeats: { color: "#475569" },
   majorityBadge: {
     background: "#14532d",
     color: "#4ade80",
@@ -525,7 +604,7 @@ const styles = {
   addRow: {
     border: "1px dashed #334155",
     background: "transparent",
-    borderLeft: "1px dashed #334155", // override coloured left border
+    borderLeft: "1px dashed #334155",
   },
   colorPicker: {
     width: 30,
@@ -562,7 +641,7 @@ const styles = {
     flexShrink: 0,
     width: 18,
     textAlign: "center",
-    transition: "color 0.15s",
+    touchAction: "none",
   },
   removeBtn: {
     background: "none",
