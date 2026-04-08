@@ -11,16 +11,16 @@ const PALETTE = [
 
 // ─── Party colour swatches ────────────────────────────────────────────────────
 const PARTY_COLORS = [
-  "#ef4444", // Red
-  "#3b82f6", // Blue
-  "#111827", // Black
-  "#22c55e", // Green
-  "#eab308", // Yellow
-  "#ec4899", // Pink
-  "#06b6d4", // Turquoise
-  "#f8fafc", // White
-  "#f97316", // Orange
-  "#a855f7", // Purple
+  { hex: "#ef4444", name: "Red"      },
+  { hex: "#3b82f6", name: "Blue"     },
+  { hex: "#111827", name: "Black"    },
+  { hex: "#22c55e", name: "Green"    },
+  { hex: "#eab308", name: "Yellow"   },
+  { hex: "#ec4899", name: "Pink"     },
+  { hex: "#06b6d4", name: "Turquoise"},
+  { hex: "#f8fafc", name: "White"    },
+  { hex: "#f97316", name: "Orange"   },
+  { hex: "#a855f7", name: "Purple"   },
 ];
 
 // ─── Custom colour picker ─────────────────────────────────────────────────────
@@ -72,16 +72,16 @@ function ColorPicker({ value, onChange }) {
             gap: 6, boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
           }}
         >
-          {PARTY_COLORS.map(c => (
+          {PARTY_COLORS.map(({ hex, name }) => (
             <button
-              key={c}
-              onClick={() => { onChange(c); setOpen(false); }}
-              title={c}
+              key={hex}
+              onClick={() => { onChange(hex); setOpen(false); }}
+              title={name}
               style={{
                 width: 26, height: 26, borderRadius: 6,
-                background: c,
-                border: c === value ? "2px solid #f8fafc" : "2px solid transparent",
-                outline: c === value ? "2px solid #64748b" : "none",
+                background: hex,
+                border: hex === value ? "2px solid #f8fafc" : "2px solid transparent",
+                outline: hex === value ? "2px solid #64748b" : "none",
                 outlineOffset: 1,
                 cursor: "pointer", padding: 0,
               }}
