@@ -40,14 +40,19 @@ function ColorPicker({ value, onChange }) {
 
   useEffect(() => {
     if (!open) return;
-    const close = (e) => {
+    const closeOnClickOutside = (e) => {
       if (
         popoverRef.current && !popoverRef.current.contains(e.target) &&
         btnRef.current     && !btnRef.current.contains(e.target)
       ) setOpen(false);
     };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    const closeOnScroll = () => setOpen(false);
+    document.addEventListener("mousedown", closeOnClickOutside);
+    window.addEventListener("scroll", closeOnScroll, true); // capture to catch all scroll containers
+    return () => {
+      document.removeEventListener("mousedown", closeOnClickOutside);
+      window.removeEventListener("scroll", closeOnScroll, true);
+    };
   }, [open]);
 
   return (
