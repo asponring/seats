@@ -98,10 +98,11 @@ export default function ParliamentVisualizer() {
   }, [parties, totalSeats]);
 
   // ── Majority line ───────────────────────────────────────────────────────────
-  const majorityAngle = useMemo(() => {
-    if (totalSeats === 0) return 270;
-    return 180 + (majority / totalSeats) * 180;
-  }, [majority, totalSeats]);
+  // Always at 270° — the geometric centre of the semicircle.
+  // The old formula used `majority / totalSeats * 180` which ignored the
+  // inter-party gaps (totalGap), so the marker drifted whenever parties were
+  // added or removed and the available arc width changed.
+  const majorityAngle = 270;
 
   const majA     = toXY(CX, CY, IR - 10, majorityAngle);
   const majB     = toXY(CX, CY, OR + 10, majorityAngle);
