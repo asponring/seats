@@ -506,7 +506,9 @@ export default function ParliamentVisualizer() {
                 d={arcPath(CX, CY, OR, IR, sl.a1, sl.a2)}
                 fill={sl.color}
                 opacity={hoveredId && hoveredId !== sl.id ? 0.28 : 1}
-                style={{ cursor: "pointer", transition: "opacity 0.15s" }}
+                stroke={hoveredId === sl.id ? "rgba(255,255,255,0.8)" : "none"}
+                strokeWidth={hoveredId === sl.id ? 2.5 : 0}
+                style={{ cursor: "pointer", transition: "opacity 0.15s, stroke 0.15s" }}
                 onMouseEnter={() => setHovered(sl.id)}
                 onMouseLeave={() => setHovered(null)}
               />
