@@ -105,11 +105,9 @@ const uid = () => _uid++;
 
 // ─── Sample data ─────────────────────────────────────────────────────────────
 const SAMPLE = [
-  { id: uid(), name: "Progressive Party",   seats: 220, color: "#3b82f6" },
-  { id: uid(), name: "Conservative Party",  seats: 195, color: "#ef4444" },
-  { id: uid(), name: "Green Alliance",      seats:  42, color: "#22c55e" },
-  { id: uid(), name: "Liberty Union",       seats:  28, color: "#f59e0b" },
-  { id: uid(), name: "Social Democrats",    seats:  15, color: "#a855f7" },
+  { id: uid(), name: "[Party 1]", seats: 40, color: "#3b82f6" },
+  { id: uid(), name: "[Party 2]", seats: 35, color: "#ef4444" },
+  { id: uid(), name: "[Party 3]", seats: 25, color: "#22c55e" },
 ];
 
 // ─── SVG helpers ─────────────────────────────────────────────────────────────
