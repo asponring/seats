@@ -23614,7 +23614,7 @@
     { hex: "#f97316", name: "Orange" },
     { hex: "#a855f7", name: "Purple" }
   ];
-  var DEFAULT_ASSEMBLY_NAME = "[Enter assembly name here]";
+  var DEFAULT_ASSEMBLY_NAME = "";
   function ColorPicker({ value, onChange }) {
     const [open, setOpen] = (0, import_react.useState)(false);
     const [pos, setPos] = (0, import_react.useState)({ top: 0, left: 0 });
@@ -23746,7 +23746,7 @@
     const [parties, setParties] = (0, import_react.useState)(SAMPLE);
     const [draft, setDraft] = (0, import_react.useState)({ name: "", seats: "", color: PALETTE[5] });
     const [hoveredId, setHovered] = (0, import_react.useState)(null);
-    const [chamber, setChamber] = (0, import_react.useState)(DEFAULT_ASSEMBLY_NAME);
+    const [chamber, setChamber] = (0, import_react.useState)("");
     const [drag, setDrag] = (0, import_react.useState)(null);
     const dragMeta = (0, import_react.useRef)(null);
     const rowRefs = (0, import_react.useRef)({});

@@ -23,7 +23,7 @@ const PARTY_COLORS = [
   { hex: "#a855f7", name: "Purple"   },
 ];
 
-const DEFAULT_ASSEMBLY_NAME = "[Enter assembly name here]";
+const DEFAULT_ASSEMBLY_NAME = "";
 
 // ─── Custom colour picker ─────────────────────────────────────────────────────
 function ColorPicker({ value, onChange }) {
@@ -156,7 +156,7 @@ export default function ParliamentVisualizer() {
   const [parties, setParties]   = useState(SAMPLE);
   const [draft, setDraft]       = useState({ name: "", seats: "", color: PALETTE[5] });
   const [hoveredId, setHovered] = useState(null);
-  const [chamber, setChamber]   = useState(DEFAULT_ASSEMBLY_NAME);
+  const [chamber, setChamber]   = useState("");
 
   // drag = { id, origIdx, insertIdx, rh, ghostX, ghostY, ghostW }
   const [drag, setDrag] = useState(null);
