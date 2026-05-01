@@ -23614,6 +23614,7 @@
     { hex: "#f97316", name: "Orange" },
     { hex: "#a855f7", name: "Purple" }
   ];
+  var DEFAULT_ASSEMBLY_NAME = "[Enter assembly name here]";
   function ColorPicker({ value, onChange }) {
     const [open, setOpen] = (0, import_react.useState)(false);
     const [pos, setPos] = (0, import_react.useState)({ top: 0, left: 0 });
@@ -23745,7 +23746,7 @@
     const [parties, setParties] = (0, import_react.useState)(SAMPLE);
     const [draft, setDraft] = (0, import_react.useState)({ name: "", seats: "", color: PALETTE[5] });
     const [hoveredId, setHovered] = (0, import_react.useState)(null);
-    const [chamber, setChamber] = (0, import_react.useState)("Parliament");
+    const [chamber, setChamber] = (0, import_react.useState)(DEFAULT_ASSEMBLY_NAME);
     const [drag, setDrag] = (0, import_react.useState)(null);
     const dragMeta = (0, import_react.useRef)(null);
     const rowRefs = (0, import_react.useRef)({});
@@ -23877,7 +23878,7 @@
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#475569";
       ctx.font = "13px system-ui, -apple-system, sans-serif";
-      ctx.fillText(chamber || "Parliament", CX, CY - 42);
+      ctx.fillText(chamber || DEFAULT_ASSEMBLY_NAME, CX, CY - 42);
       ctx.fillStyle = "#f8fafc";
       ctx.font = "800 34px system-ui, -apple-system, sans-serif";
       ctx.fillText(totalSeats.toLocaleString(), CX, CY - 12);
@@ -24003,7 +24004,7 @@
           ...s.chamberInput,
           width: `${(Math.max(6, chamber.length || 14) * 0.65 + 1).toFixed(2)}em`
         },
-        placeholder: "Chamber name\u2026"
+        placeholder: "Assembly name\u2026"
       }
     ), /* @__PURE__ */ import_react.default.createElement(
       "svg",
@@ -24119,7 +24120,7 @@
         fontSize: "13",
         style: { pointerEvents: "none" }
       },
-      chamber || "Parliament"
+      chamber || DEFAULT_ASSEMBLY_NAME
     ), /* @__PURE__ */ import_react.default.createElement(
       "text",
       {

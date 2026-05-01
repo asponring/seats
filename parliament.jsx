@@ -23,6 +23,8 @@ const PARTY_COLORS = [
   { hex: "#a855f7", name: "Purple"   },
 ];
 
+const DEFAULT_ASSEMBLY_NAME = "[Enter assembly name here]";
+
 // ─── Custom colour picker ─────────────────────────────────────────────────────
 function ColorPicker({ value, onChange }) {
   const [open, setOpen]   = useState(false);
@@ -154,7 +156,7 @@ export default function ParliamentVisualizer() {
   const [parties, setParties]   = useState(SAMPLE);
   const [draft, setDraft]       = useState({ name: "", seats: "", color: PALETTE[5] });
   const [hoveredId, setHovered] = useState(null);
-  const [chamber, setChamber]   = useState("Parliament");
+  const [chamber, setChamber]   = useState(DEFAULT_ASSEMBLY_NAME);
 
   // drag = { id, origIdx, insertIdx, rh, ghostX, ghostY, ghostW }
   const [drag, setDrag] = useState(null);
@@ -323,7 +325,7 @@ export default function ParliamentVisualizer() {
     ctx.textBaseline = "middle";
     ctx.fillStyle    = "#475569";
     ctx.font         = "13px system-ui, -apple-system, sans-serif";
-    ctx.fillText(chamber || "Parliament", CX, CY - 42);
+    ctx.fillText(chamber || DEFAULT_ASSEMBLY_NAME, CX, CY - 42);
     ctx.fillStyle    = "#f8fafc";
     ctx.font         = "800 34px system-ui, -apple-system, sans-serif";
     ctx.fillText(totalSeats.toLocaleString(), CX, CY - 12);
@@ -478,7 +480,7 @@ export default function ParliamentVisualizer() {
                 ...s.chamberInput,
                 width: `${((Math.max(6, chamber.length || 14)) * 0.65 + 1).toFixed(2)}em`,
               }}
-              placeholder="Chamber name…"
+              placeholder="Assembly name…"
             />
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
               style={{ color: "#475569", flexShrink: 0, marginBottom: 2 }}>
@@ -558,7 +560,7 @@ export default function ParliamentVisualizer() {
                 <text x={CX} y={CY - 42} textAnchor="middle"
                   fill="#475569" fontSize="13"
                   style={{ pointerEvents: "none" }}>
-                  {chamber || "Parliament"}
+                  {chamber || DEFAULT_ASSEMBLY_NAME}
                 </text>
                 <text x={CX} y={CY - 12} textAnchor="middle"
                   fill="#f8fafc" fontSize="34" fontWeight="800"
